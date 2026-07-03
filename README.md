@@ -31,6 +31,125 @@ Learnova AI Service is a FastAPI backend for turning uploaded PDF learning mater
 `-- uploads/                        # Uploaded PDF files
 ```
 
+## Architecture
+
+The service is organized as a layered FastAPI application. Routes receive HTTP requests, service modules handle document processing, embeddings, retrieval, topic processing, and question generation, and the LangGraph workflow coordinates the test-generation pipeline.
+
+```mermaid
+flowchart TD
+    Client[Client / Frontend / Swagger UI]
+    API[FastAPI App]
+    DocRoutes[Document Routes]
+    TestRoutes[Test Routes]
+    PdfService[PDF Service]
+    ChunkService[Chunk Service]
+    EmbeddingService[Embedding Services]
+    Chroma[ChromaDB Vector Store]
+    Graph[LangGraph Workflow]
+    TopicServices[Topic Services]
+    BlueprintServices[Blueprint Services]
+    QuestionServices[Question Services]
+    Groq[Groq LLM]
+    Uploads[uploads/]
+    Storage[storage/chroma_db/]
+
+    Client --> API
+    API --> DocRoutes
+    API --> TestRoutes
+
+    DocRoutes --> Uploads
+    DocRoutes --> PdfService
+    PdfService --> ChunkService
+    ChunkService --> EmbeddingService
+    EmbeddingService --> Chroma
+    Chroma --> Storage
+
+    TestRoutes --> Graph
+    Graph --> Chroma
+    Graph --> TopicServices
+    Graph --> BlueprintServices
+    Graph --> QuestionServices
+    TopicServices --> Groq
+    QuestionServices --> Groq
+```
+
+### Generation Workflow
+
+```mermaid
+flowchart LR
+    A[Document ID + Test Request] --> B[Load Document Chunks]
+    B --> C[Extract Topics]
+    C --> D[Flatten and Canonicalize Topics]
+    D --> E[Aggregate Topics]
+    E --> F[Create Blueprint]
+    F --> G[Resolve Focus Topics]
+    G --> H[Optimize Blueprint]
+    H --> I[Generate MCQs]
+    I --> J[Test Response]
+```
+
+## Data Flow Diagrams
+
+### DFD Level 0
+
+Level 0 shows the whole Learnova AI Service as a single process that receives learning documents and test-generation requests, then returns processed document IDs and generated MCQ tests.
+
+```mermaid
+flowchart LR
+    User[User / Teacher]
+    System((Learnova AI Service))
+    VectorStore[(ChromaDB Storage)]
+    FileStore[(Uploaded PDF Storage)]
+    LLM[Groq LLM API]
+
+    User -->|Upload PDF| System
+    System -->|Document ID| User
+    User -->|Document ID, title, difficulty, question count, focus topic| System
+    System -->|Generated MCQ test| User
+
+    System -->|Save uploaded PDF| FileStore
+    System -->|Store chunks and embeddings| VectorStore
+    System -->|Prompt for topic and question generation| LLM
+    LLM -->|Generated text output| System
+```
+
+### DFD Level 1
+
+Level 1 breaks the service into its main internal processes: document ingestion, embedding storage, test request handling, topic and blueprint creation, and MCQ generation.
+
+```mermaid
+flowchart TD
+    User[User / Teacher]
+    P1((1. Upload Document))
+    P2((2. Extract and Chunk Text))
+    P3((3. Generate Embeddings))
+    P4((4. Store Document Vectors))
+    P5((5. Receive Test Request))
+    P6((6. Build Topics and Blueprint))
+    P7((7. Generate MCQs))
+    FileStore[(uploads/)]
+    VectorStore[(storage/chroma_db/)]
+    LLM[Groq LLM API]
+
+    User -->|PDF file| P1
+    P1 -->|Saved PDF| FileStore
+    P1 -->|File path| P2
+    P2 -->|Text chunks| P3
+    P3 -->|Chunk embeddings| P4
+    P4 -->|Document chunks and vectors| VectorStore
+    P4 -->|Document ID| User
+
+    User -->|Document ID and test options| P5
+    P5 -->|Document ID| P6
+    P6 -->|Read chunks| VectorStore
+    P6 -->|Topic extraction prompts| LLM
+    LLM -->|Topic output| P6
+    P6 -->|Optimized blueprint| P7
+    P7 -->|Question generation prompts| LLM
+    LLM -->|Generated MCQs| P7
+    P7 -->|Final test| User
+```
+
 ## Requirements
 
 - Python 3.11+
